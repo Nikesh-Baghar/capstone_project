@@ -16,7 +16,7 @@ import torch
 # Model Configurations
 # -----------------------------
 MODELS = {
-    "MistralLite": "amazon/MistralLite",
+    #"MistralLite": "amazon/MistralLite",
     "GPT-Neo (125M)": "EleutherAI/gpt-neo-125M",
     "GPT-2": "openai-community/gpt2",
     "Qwen-0.6B": "Qwen/Qwen3-0.6B"
