@@ -1,8 +1,7 @@
 streamlit
 transformers
 accelerate
-torch==2.2.0+cpu
-torchvision==0.17.1+cpu
-torchaudio==2.2.0+cpu
--f https://download.pytorch.org/whl/cpu/torch_stable.html
 textwrap
+torch
+torchvision
+torchaudio
