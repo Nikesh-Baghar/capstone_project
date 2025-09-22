@@ -78,8 +78,8 @@ model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
 strategy = st.selectbox("Select decoding strategy:", ["greedy", "beam", "top-k", "top-p"])
 prompt = st.text_area("Enter your prompt:", "Write a 500-word essay on the future of AI.")
 
-temperature = st.slider("Temperature", 0.0, 2.0, 1.0, 0.1, 0.5, 0.7, 0.9)
-max_new_tokens = st.slider("Max New Tokens", 50, 800,2048, 500, 50)
+temperature = st.slider("Temperature", 0.0, 2.0, 1.0, 0.1)
+max_new_tokens = st.slider("Max New Tokens", 50, 800, 500, 50)
 
 if st.button("Generate"):
     tokenizer, model = load_model(MODELS[model_choice])
