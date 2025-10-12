@@ -144,7 +144,7 @@ if st.button("Generate"):
             else:
                 final_prompt = f"Translate the following text from German to English:\n\n{prompt}"
         elif task == "Summarization":
-            final_prompt = f"Summarize the following text:\n\n{prompt}"
+            final_prompt = f"Summarize the following text in 80 words:\n\n{prompt}"
         elif task == "Story Generation":
             final_prompt = f"Continue the following story creatively:\n\n{prompt}"
         else:
