@@ -40,6 +40,12 @@ def load_model(model_name):
 # -----------------------------
 def generate_response(tokenizer, model, prompt, strategy="greedy",
                       temperature=0.7, top_k=20, top_p=0.85, max_new_tokens=800):
+    """
+    Robust generation:
+      - checks tokenizer/model max length
+      - avoids silent truncation
+      - sets max_length = min(model_max_len, input_len + max_new_tokens)
+    """
 
     gen_kwargs = {
         "max_new_tokens": max_new_tokens,
@@ -67,20 +73,67 @@ def generate_response(tokenizer, model, prompt, strategy="greedy",
     else:
         raise ValueError("Unsupported decoding strategy")
 
-    # Handle chat models like Qwen
+    # --- Prepare inputs robustly ---
+    # For chat-style models we might use apply_chat_template
     if "Qwen" in model.name_or_path and hasattr(tokenizer, "apply_chat_template"):
         messages = [{"role": "user", "content": prompt}]
         text = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
         )
-        inputs = tokenizer([text], return_tensors="pt").to(model.device)
+        text_to_tokenize = text
     else:
-        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        text_to_tokenize = prompt
 
+    # Tokenize WITHOUT silent truncation, then handle too-long input explicitly
+    # Note: tokenizer.model_max_length is usually the safe upper bound
+    model_max_len = getattr(tokenizer, "model_max_length", None)
+    if model_max_len is None:
+        # fallback to model config if tokenizer doesn't expose it
+        model_max_len = getattr(model.config, "max_position_embeddings", None)
+
+    # Tokenize with no truncation so we can check length ourselves
+    inputs = tokenizer(
+        text_to_tokenize,
+        return_tensors="pt",
+        truncation=False,  # don't let tokenizer silently chop it
+        padding=False
+    ).to(model.device)
+
+    input_len = inputs.input_ids.shape[1]
+
+    # If the prompt itself is longer than allowed context, truncate intelligently (keep end)
+    if model_max_len is not None and input_len >= model_max_len:
+        # keep the tail of the prompt (most recent tokens), so instruction remains near generation point
+        # Tokenize again but now allow truncation from the left by using `max_length` and `truncation='only_first'` behavior:
+        # Some tokenizers don't have 'truncation' options for direction; easiest is to re-tokenize with max_length
+        st.warning(f"Prompt too long for model context ({input_len} tokens > {model_max_len}). Truncating to last {model_max_len - 1} tokens.")
+        # Re-tokenize keeping last tokens: convert to ids then slice
+        all_ids = inputs.input_ids[0]
+        keep = model_max_len - 1  # reserve at least 1 token for generation start
+        new_ids = all_ids[-keep:].unsqueeze(0).to(model.device)
+        inputs['input_ids'] = new_ids
+        # no attention mask? create one
+        inputs['attention_mask'] = torch.ones_like(inputs['input_ids']).to(model.device)
+        input_len = inputs.input_ids.shape[1]
+
+    # Compute safe max_length for generation
+    if model_max_len is not None:
+        max_allowed = min(model_max_len, input_len + max_new_tokens)
+    else:
+        max_allowed = input_len + max_new_tokens
+
+    # Pass both max_length and max_new_tokens to be explicit
+    gen_kwargs.update({"max_length": max_allowed, "max_new_tokens": max_new_tokens})
+
+    # Generate
     with torch.no_grad():
         outputs = model.generate(**inputs, **gen_kwargs)
-    result = tokenizer.decode(outputs[0][len(inputs.input_ids[0]):], skip_special_tokens=True)
+
+    # outputs[0] is full sequence: input_ids + generated tokens in most HF models
+    generated_ids = outputs[0][input_len:]
+    result = tokenizer.decode(generated_ids, skip_special_tokens=True)
     return result.strip()
+
 
 
 # -----------------------------
@@ -140,13 +193,13 @@ if st.button("Generate"):
     with st.spinner("Generating response..."):
         if task == "Machine Translation":
             if translation_dir == "English → German":
-                final_prompt = f"Translate the following text from English to German:\n\n{prompt}"
+                final_prompt = f"{prompt}:Translate the text from English to German"
             else:
-                final_prompt = f"Translate the following text from German to English:\n\n{prompt}"
+                final_prompt = f"{prompt}:Translate the text from German to English"
         elif task == "Summarization":
-            final_prompt = f"Summarize the following text in 80 words:\n\n{prompt}"
+            final_prompt = f"{prompt}:Summarize the text in 80 words"
         elif task == "Story Generation":
-            final_prompt = f"Continue the following story creatively:\n\n{prompt}"
+            final_prompt = f"{prompt}Continue the story creatively"
         else:
             final_prompt = prompt  
         
