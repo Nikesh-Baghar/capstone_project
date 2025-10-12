@@ -195,11 +195,11 @@ if st.button("Generate"):
             if translation_dir == "English → German":
                 final_prompt = f"{prompt}:Translate the text from English to German language"
             else:
-                final_prompt = f"{prompt}:Translate the text from German to English language"
+                final_prompt = f"'{prompt}':Translate the text from German to English language"
         elif task == "Summarization":
-            final_prompt = f"{prompt}:Summarize the text in 80 words"
+            final_prompt = f"'{prompt}':Summarize the text in 80 words"
         elif task == "Story Generation":
-            final_prompt = f"{prompt}Continue the story creatively"
+            final_prompt = f"'{prompt}' Continue the story creatively"
         else:
             final_prompt = prompt  
         
