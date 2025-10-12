@@ -9,14 +9,13 @@ Original file is located at
 
 # streamlit_app.py
 import streamlit as st
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
 # -----------------------------
 # Model Configurations
 # -----------------------------
 MODELS = {
-    #"MistralLite": "amazon/MistralLite",
     "GPT-Neo (125M)": "EleutherAI/gpt-neo-125M",
     "GPT-2": "openai-community/gpt2",
     "Qwen-0.6B": "Qwen/Qwen3-0.6B"
@@ -35,26 +34,40 @@ def load_model(model_name):
     )
     return tokenizer, model
 
+
 # -----------------------------
 # Generation Function
 # -----------------------------
 def generate_response(tokenizer, model, prompt, strategy="greedy",
                       temperature=0.7, top_k=20, top_p=0.85, max_new_tokens=800):
 
-    gen_kwargs = {"max_new_tokens": max_new_tokens, "temperature": temperature}
+    gen_kwargs = {
+        "max_new_tokens": max_new_tokens,
+        "temperature": temperature,
+        "do_sample": True
+    }
 
+    # --- Decoding Strategies ---
     if strategy == "greedy":
         gen_kwargs.update({"do_sample": False})
     elif strategy == "beam":
         gen_kwargs.update({"num_beams": 5, "do_sample": False})
     elif strategy == "top-k":
-        gen_kwargs.update({"do_sample": True, "top_k": top_k})
+        gen_kwargs.update({"top_k": top_k})
     elif strategy == "top-p":
-        gen_kwargs.update({"do_sample": True, "top_p": top_p})
+        gen_kwargs.update({"top_p": top_p})
+    elif strategy == "contrastive-search":
+        gen_kwargs.update({"penalty_alpha": 0.6, "top_k": 4})
+    elif strategy == "locally-typical":
+        gen_kwargs.update({"typical_p": 0.9})
+    elif strategy == "speculative-decoding":
+        gen_kwargs.update({"top_p": 0.8, "temperature": 0.6, "top_k": 30})
+    elif strategy == "contrastive-divergence":
+        gen_kwargs.update({"repetition_penalty": 1.8, "top_k": 40, "temperature": 0.7})
     else:
-        raise ValueError("Choose from: greedy, beam, top-k, top-p")
+        raise ValueError("Unsupported decoding strategy")
 
-    # Handle Qwen (chat template)
+    # Handle chat models like Qwen
     if "Qwen" in model.name_or_path and hasattr(tokenizer, "apply_chat_template"):
         messages = [{"role": "user", "content": prompt}]
         text = tokenizer.apply_chat_template(
@@ -64,29 +77,73 @@ def generate_response(tokenizer, model, prompt, strategy="greedy",
     else:
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-    outputs = model.generate(**inputs, **gen_kwargs)
+    with torch.no_grad():
+        outputs = model.generate(**inputs, **gen_kwargs)
     result = tokenizer.decode(outputs[0][len(inputs.input_ids[0]):], skip_special_tokens=True)
     return result.strip()
+
 
 # -----------------------------
 # Streamlit UI
 # -----------------------------
-st.title("LLM Response Comparator")
+st.title("🧠 LLM Response Comparator")
 
-# User selections
+# Model & decoding selections
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
-strategy = st.selectbox("Select decoding strategy:", ["greedy", "beam", "top-k", "top-p"])
-prompt = st.text_area("Enter your prompt:", "Write a 500-word essay on the future of AI.")
 
+strategy = st.selectbox(
+    "Select decoding strategy:",
+    [
+        "greedy",
+        "beam",
+        "top-k",
+        "top-p",
+        "contrastive-search",
+        "locally-typical",
+        "speculative-decoding",
+        "contrastive-divergence"
+    ]
+)
+
+# -----------------------------
+# Task Selection
+# -----------------------------
+task = st.selectbox(
+    "Select a task:",
+    ["Machine Translation", "Summarization", "Story Generation"]
+)
+
+if task == "Machine Translation":
+    translation_dir = st.selectbox(
+        "Select translation direction:",
+        ["English → German", "German → English"]
+    )
+    prompt_label = f"Enter your text to translate ({translation_dir}):"
+elif task == "Summarization":
+    prompt_label = "Enter the text to summarize:"
+else:
+    prompt_label = "Enter the story prompt:"
+
+prompt = st.text_area(prompt_label, "")
+
+# -----------------------------
+# Generation Settings
+# -----------------------------
 temperature = st.slider("Temperature", 0.0, 2.0, 1.0, 0.1)
 max_new_tokens = st.slider("Max New Tokens", 50, 800, 500, 50)
 
+# -----------------------------
+# Generate Button
+# -----------------------------
 if st.button("Generate"):
     tokenizer, model = load_model(MODELS[model_choice])
     with st.spinner("Generating response..."):
         response = generate_response(
-            tokenizer, model, prompt, strategy=strategy,
-            temperature=temperature, max_new_tokens=max_new_tokens
+            tokenizer, model, prompt,
+            strategy=strategy,
+            temperature=temperature,
+            max_new_tokens=max_new_tokens
         )
+
     st.subheader("Generated Response")
     st.write(response)
