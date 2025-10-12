@@ -138,8 +138,20 @@ max_new_tokens = st.slider("Max New Tokens", 50, 800, 500, 50)
 if st.button("Generate"):
     tokenizer, model = load_model(MODELS[model_choice])
     with st.spinner("Generating response..."):
+        if task == "Machine Translation":
+            if translation_dir == "English → German":
+                final_prompt = f"Translate the following text from English to German:\n\n{prompt}"
+            else:
+                final_prompt = f"Translate the following text from German to English:\n\n{prompt}"
+        elif task == "Summarization":
+            final_prompt = f"Summarize the following text:\n\n{prompt}"
+        elif task == "Story Generation":
+            final_prompt = f"Continue the following story creatively:\n\n{prompt}"
+        else:
+            final_prompt = prompt  
+        
         response = generate_response(
-            tokenizer, model, prompt,
+            tokenizer, model, final_prompt,
             strategy=strategy,
             temperature=temperature,
             max_new_tokens=max_new_tokens
