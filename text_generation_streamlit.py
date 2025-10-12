@@ -193,9 +193,9 @@ if st.button("Generate"):
     with st.spinner("Generating response..."):
         if task == "Machine Translation":
             if translation_dir == "English → German":
-                final_prompt = f"{prompt}:Translate the text from English to German"
+                final_prompt = f"{prompt}:Translate the text from English to German language"
             else:
-                final_prompt = f"{prompt}:Translate the text from German to English"
+                final_prompt = f"{prompt}:Translate the text from German to English language"
         elif task == "Summarization":
             final_prompt = f"{prompt}:Summarize the text in 80 words"
         elif task == "Story Generation":
